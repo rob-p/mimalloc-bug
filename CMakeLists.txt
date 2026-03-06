@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 include(FetchContent)
+find_package(Threads REQUIRED)
 
 set(MIMALLOC_VERSION "v3.2.8" CACHE STRING "mimalloc tag to fetch when not using GIT_TAG")
 set(MIMALLOC_GIT_TAG "" CACHE STRING "Optional mimalloc git tag/branch/SHA to fetch directly")
@@ -41,5 +42,9 @@ else()
 endif()
 FetchContent_MakeAvailable(mimalloc_src)
 
+# Follow mimalloc "Static override" guidance: link mimalloc.o as the first
+# object file on the final link line.
 add_executable(mimalloc_mre main.cpp plugin.cpp)
-target_link_libraries(mimalloc_mre PRIVATE mimalloc-static)
+add_dependencies(mimalloc_mre mimalloc-obj-target)
+target_link_options(mimalloc_mre PRIVATE "${mimalloc_src_BINARY_DIR}/mimalloc.o")
+target_link_libraries(mimalloc_mre PRIVATE Threads::Threads)

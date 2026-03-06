@@ -1,6 +1,6 @@
 ## Title
 
-macOS arm64: deterministic `pointer being freed was not allocated` with `MI_OVERRIDE=ON` (v3.2.8), reproducible in standalone C++ MRE
+macOS arm64 static override behavior depends on exact link mode: `mimalloc.o` first resolves prior crash with `MI_OSX_ZONE=ON`
 
 ## Environment
 
@@ -14,8 +14,10 @@ macOS arm64: deterministic `pointer being freed was not allocated` with `MI_OVER
 
 ## Summary
 
-I can reproduce a deterministic crash in a minimal standalone C++ program when
-mimalloc is built and linked in override mode on macOS.
+Initial crashes were caused by not following the exact static-override link
+prescription. After switching to the documented mode (link `mimalloc.o` as the
+first object on the final link line), the previous crash with `MI_OSX_ZONE=ON`
+does not reproduce.
 
 Error signature:
 
@@ -24,7 +26,7 @@ malloc: *** error for object 0x...: pointer being freed was not allocated
 malloc: *** set a breakpoint in malloc_error_break to debug
 ```
 
-The same MRE is stable when `MI_OVERRIDE=OFF`.
+Remaining failing cases are those with `MI_OVERRIDE=ON` and `MI_OSX_ZONE=OFF`.
 
 ## Minimal Reproducer
 
@@ -48,13 +50,13 @@ cmake --build build -j8
 
 Observed exit code on this machine: `133`.
 
-## Matrix (same MRE)
+## Matrix (same MRE, with `mimalloc.o` first)
 
-- `MI_OVERRIDE=ON MI_OSX_ZONE=ON MI_OSX_INTERPOSE=ON` -> crash (`133`)
-- `MI_OVERRIDE=ON MI_OSX_ZONE=ON MI_OSX_INTERPOSE=OFF` -> crash (`133`)
+- `MI_OVERRIDE=ON MI_OSX_ZONE=ON MI_OSX_INTERPOSE=ON` -> stable (`1`)
+- `MI_OVERRIDE=ON MI_OSX_ZONE=ON MI_OSX_INTERPOSE=OFF` -> stable (`1`)
 - `MI_OVERRIDE=ON MI_OSX_ZONE=OFF MI_OSX_INTERPOSE=ON` -> crash (`133`)
 - `MI_OVERRIDE=ON MI_OSX_ZONE=OFF MI_OSX_INTERPOSE=OFF` -> crash (`133`)
-- `MI_OVERRIDE=OFF MI_OSX_ZONE=OFF MI_OSX_INTERPOSE=OFF` -> stable (`1`, expected app return code)
+- `MI_OVERRIDE=OFF MI_OSX_ZONE=OFF MI_OSX_INTERPOSE=OFF` -> stable (`1`)
 
 ## Also tested on `dev3`
 
@@ -62,12 +64,12 @@ I also tested current `dev3` head:
 
 - `b88ce9c8fd6b7c9208a43bcdb705de9f499dbad4` (`refs/heads/dev3` at test time)
 
-Result is unchanged for this MRE:
+Result is unchanged for this corrected link mode:
 
-- all `MI_OVERRIDE=ON` combinations above still fail (`133`)
-- `MI_OVERRIDE=OFF` remains stable
+- `MI_OSX_ZONE=ON` cases are stable
+- `MI_OSX_ZONE=OFF` cases fail
 
-## LLDB backtrace excerpt
+## LLDB backtrace excerpt (failing `MI_OSX_ZONE=OFF` case)
 
 ```text
 thread #N:
@@ -80,5 +82,6 @@ Main thread is typically waiting in `std::thread::join()`.
 
 ## Notes
 
-- This resembles the thread/TLS cleanup pattern discussed in issue #1029.
-- I can share the complete MRE directory and full LLDB trace if needed.
+- This closely resembles the thread/TLS cleanup path discussed in issue #1029.
+- The original “all override modes fail” observation was from linking
+  `libmimalloc.a` in the normal library list, not `mimalloc.o` first.

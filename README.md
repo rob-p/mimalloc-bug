@@ -1,7 +1,7 @@
 # macOS mimalloc override MRE
 
-This is a standalone C++17 reproducer for a macOS allocator mismatch crash when
-`mimalloc` is used in override mode.
+This is a standalone C++17 reproducer for macOS allocator mismatch behavior
+under different mimalloc static override link styles and macOS override knobs.
 
 ## What it does
 
@@ -9,8 +9,8 @@ This is a standalone C++17 reproducer for a macOS allocator mismatch crash when
 - Links a tiny C++ program against `mimalloc-static`.
 - Uses static and `thread_local` `std::string` objects across many short-lived
   threads.
-- Reproduces `pointer being freed was not allocated` in `libsystem_malloc` when
-  `MI_OVERRIDE=ON`.
+- Uses the exact static override recommendation from mimalloc (`mimalloc.o` as
+  the first object in the final link line).
 
 ## Build + run
 
@@ -21,7 +21,7 @@ cmake --build build -j8
 echo $?
 ```
 
-Expected on the affected system: exit code `133`.
+Expected in the default configured case above: exit code `1` (clean exit).
 
 ## Quick matrix
 
@@ -31,10 +31,10 @@ Run:
 ./repro.sh
 ```
 
-Observed on this machine:
+Observed on this machine (with `mimalloc.o` first):
 
-- `override=ON zone=ON interpose=ON` -> `133`
-- `override=ON zone=ON interpose=OFF` -> `133`
+- `override=ON zone=ON interpose=ON` -> `1`
+- `override=ON zone=ON interpose=OFF` -> `1`
 - `override=ON zone=OFF interpose=ON` -> `133`
 - `override=ON zone=OFF interpose=OFF` -> `133`
 - `override=OFF zone=OFF interpose=OFF` -> `1` (expected program return code)
